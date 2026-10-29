@@ -45,6 +45,27 @@ class AdoptionRecordRepositoryTest {
                 .containsExactlyInAnyOrder("recent-dog@example.com", "cutoff-dog@example.com");
     }
 
+    @Test
+    void findAdoptionsByAdopterEmailDomain_shouldReturnOnlyExactDomainMatches() {
+        Animal dog = newAnimal("Rex", AnimalType.DOG);
+        entityManager.persist(dog);
+        entityManager.flush();
+
+        LocalDateTime adoptedAt = LocalDateTime.of(2025, 1, 1, 12, 0);
+        entityManager.persist(newAdoptionRecord(dog, "anna@example.com", adoptedAt));
+        entityManager.persist(newAdoptionRecord(dog, "bob@example.com", adoptedAt.plusDays(1)));
+        entityManager.persist(newAdoptionRecord(dog, "carol@example.net", adoptedAt.plusDays(2)));
+        entityManager.persist(newAdoptionRecord(dog, "dave@notexample.com", adoptedAt.plusDays(3)));
+        entityManager.persist(newAdoptionRecord(dog, "eve@sub.example.com", adoptedAt.plusDays(4)));
+        entityManager.flush();
+
+        var adoptions = adoptionRecordRepository.findAdoptionsByAdopterEmailDomain("example.com");
+
+        assertThat(adoptions)
+                .extracting(AdoptionRecord::getAdopterEmail)
+                .containsExactlyInAnyOrder("anna@example.com", "bob@example.com");
+    }
+
     private Animal newAnimal(String name, AnimalType type) {
         Animal animal = new Animal();
         animal.setName(name);

@@ -23,4 +23,10 @@ public interface AdoptionRecordRepository extends JpaRepository<AdoptionRecord, 
     List<AdoptionRecord> findRecentAdoptionsByAnimalType(
             @Param("type") AnimalType type,
             @Param("since") LocalDateTime since);
+
+    @Query("""
+            SELECT r FROM AdoptionRecord r
+            WHERE r.adopterEmail LIKE CONCAT('%@', :domain)
+            """)
+    List<AdoptionRecord> findAdoptionsByAdopterEmailDomain(@Param("domain") String domain);
 }

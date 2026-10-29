@@ -1,5 +1,6 @@
 package lv.bootcamp.shelter.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lv.bootcamp.shelter.config.SecurityConfig;
 import lv.bootcamp.shelter.dto.AnimalCreateRequest;
 import lv.bootcamp.shelter.dto.AnimalResponse;
@@ -44,6 +45,9 @@ class AnimalControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @MockitoBean
     private AnimalService animalService;
 
@@ -84,5 +88,27 @@ class AnimalControllerTest {
                 .andExpect(status().isBadRequest());
 
         verify(animalService, never()).create(any(AnimalCreateRequest.class));
+    }
+
+    @Test
+    void create_shouldReturn201WithCreatedAnimal() throws Exception {
+        AnimalCreateRequest request = new AnimalCreateRequest(
+                "Rex", AnimalType.DOG, "Labrador", 3, "Friendly", "chip-123");
+        when(animalService.create(any(AnimalCreateRequest.class)))
+                .thenReturn(new AnimalResponse(1L, "Rex", AnimalType.DOG, "Labrador", 3,
+                        "Friendly", AnimalStatus.AVAILABLE));
+
+        mockMvc.perform(post("/api/animals")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.name").value("Rex"))
+                .andExpect(jsonPath("$.type").value("DOG"))
+                .andExpect(jsonPath("$.breed").value("Labrador"))
+                .andExpect(jsonPath("$.age").value(3))
+                .andExpect(jsonPath("$.status").value("AVAILABLE"));
+
+        verify(animalService).create(request);
     }
 }

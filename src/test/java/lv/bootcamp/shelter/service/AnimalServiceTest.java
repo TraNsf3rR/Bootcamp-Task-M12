@@ -10,15 +10,21 @@ import lv.bootcamp.shelter.model.AnimalType;
 import lv.bootcamp.shelter.repository.AnimalRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -34,6 +40,9 @@ class AnimalServiceTest {
 
     @Mock
     private NotificationClient notificationClient;
+
+    @Captor
+    private ArgumentCaptor<List<Long>> reservedIdsCaptor;
 
     @InjectMocks
     private AnimalService animalService;
@@ -76,5 +85,69 @@ class AnimalServiceTest {
         assertThatThrownBy(() -> animalService.adopt(
                 new AdoptionRequest(1L, "Anna", "anna@example.com")))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void adopt_shouldMarkAnimalAdoptedAndSendNotification() {
+        Animal animal = new Animal();
+        animal.setId(42L);
+        animal.setName("Rex");
+        animal.setType(AnimalType.DOG);
+        animal.setBreed("Labrador");
+        animal.setAge(3);
+        animal.setDescription("Friendly");
+        animal.setStatus(AnimalStatus.AVAILABLE);
+        when(animalRepository.findById(42L)).thenReturn(Optional.of(animal));
+        when(animalRepository.save(any(Animal.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AnimalResponse response = animalService.adopt(
+                new AdoptionRequest(42L, "Anna", "anna@example.com"));
+
+        assertThat(response.id()).isEqualTo(42L);
+        assertThat(response.name()).isEqualTo("Rex");
+        assertThat(response.status()).isEqualTo(AnimalStatus.ADOPTED);
+        verify(animalRepository).save(animal);
+        verify(notificationClient).sendAdoptionNotification(42L, "Rex", "anna@example.com");
+    }
+
+    @Test
+    void reserveMultiple_shouldNotifyExactlyReservedAnimalIds() {
+        Animal firstAnimal = new Animal();
+        firstAnimal.setId(1L);
+        firstAnimal.setName("Rex");
+        firstAnimal.setType(AnimalType.DOG);
+        firstAnimal.setStatus(AnimalStatus.AVAILABLE);
+
+        Animal secondAnimal = new Animal();
+        secondAnimal.setId(2L);
+        secondAnimal.setName("Mittens");
+        secondAnimal.setType(AnimalType.CAT);
+        secondAnimal.setStatus(AnimalStatus.AVAILABLE);
+
+        when(animalRepository.findAllById(List.of(1L, 2L)))
+                .thenReturn(List.of(firstAnimal, secondAnimal));
+        when(animalRepository.save(any(Animal.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<AnimalResponse> responses = animalService.reserveMultiple(List.of(1L, 2L));
+
+        assertThat(responses).hasSize(2);
+        assertThat(firstAnimal.getStatus()).isEqualTo(AnimalStatus.RESERVED);
+        assertThat(secondAnimal.getStatus()).isEqualTo(AnimalStatus.RESERVED);
+        verify(notificationClient).sendBulkStatusNotification(reservedIdsCaptor.capture(), eq("RESERVED"));
+        assertThat(reservedIdsCaptor.getValue()).containsExactlyInAnyOrder(1L, 2L);
+    }
+
+    @Test
+    void create_shouldRejectDuplicateMicrochipWithoutSaving() {
+        String microchipId = "chip-123";
+        when(animalRepository.existsByMicrochipId(microchipId)).thenReturn(true);
+
+        assertThatThrownBy(() -> animalService.create(
+                new AnimalCreateRequest("Rex", AnimalType.DOG, "Labrador", 3, "Friendly", microchipId)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(microchipId);
+
+        verify(animalRepository).existsByMicrochipId(microchipId);
+        verify(animalRepository, never()).save(any(Animal.class));
     }
 }

@@ -1,0 +1,15 @@
+package lv.bootcamp.shelter.model;
+
+/**
+ * Immutable result of an adoption eligibility check.
+ */
+public record AdoptionResult(boolean approved, String reason, int priorityScore) {
+
+    public static AdoptionResult approved(int score) {
+        return new AdoptionResult(true, "Approved", score);
+    }
+
+    public static AdoptionResult rejected(String reason) {
+        return new AdoptionResult(false, reason, 0);
+    }
+}

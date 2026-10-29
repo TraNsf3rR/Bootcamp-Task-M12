@@ -7,8 +7,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Ticket: ANIMAL-3 (see README).
@@ -36,6 +38,22 @@ class AnimalRepositoryTest {
 
         assertThat(available).hasSize(1);
         assertThat(available.getFirst().getName()).isEqualTo("Rex");
+    }
+
+    @Test
+    void save_shouldFailWhenMicrochipIdIsDuplicated() {
+        Animal registered = newAnimal("Rex", AnimalType.DOG, AnimalStatus.AVAILABLE);
+        registered.setMicrochipId("chip-123");
+        entityManager.persist(registered);
+        entityManager.flush();
+
+        Animal duplicate = newAnimal("Mia", AnimalType.CAT, AnimalStatus.AVAILABLE);
+        duplicate.setMicrochipId("chip-123");
+
+        assertThatThrownBy(() -> {
+            animalRepository.save(duplicate);
+            entityManager.flush();
+        }).isInstanceOf(DataIntegrityViolationException.class);
     }
 
     private Animal newAnimal(String name, AnimalType type, AnimalStatus status) {
